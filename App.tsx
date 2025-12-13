@@ -20,7 +20,10 @@ import {
   FileText,
   Clock,
   List,
-  Receipt
+  Receipt,
+  Calculator,
+  CalendarRange,
+  Calendar
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import ReactMarkdown from 'react-markdown';
@@ -432,7 +435,51 @@ const App: React.FC = () => {
   };
 
   const ReportPage = () => {
-    const [reportView, setReportView] = useState<'bazar' | 'full'>('bazar');
+    const [reportView, setReportView] = useState<'summary' | 'bazar' | 'full'>('summary');
+
+    // --- Statistics for Summary View ---
+    const { dailyStats, monthlyStats, yearlyStats } = useMemo(() => {
+        const d: Record<string, {inc: number, exp: number}> = {};
+        const m: Record<string, {inc: number, exp: number}> = {};
+        const y: Record<string, {inc: number, exp: number}> = {};
+
+        transactions.forEach(t => {
+            // We focus on Income and Expense for the summary tables.
+            // Transfers are excluded from "Spending/Earning" totals to avoid double counting, 
+            // unless you want to track cash flow specifically. 
+            // Here we adhere to "Expend" and "Income".
+            if (t.type === 'transfer') return;
+
+            const date = new Date(t.date);
+            const yKey = date.getFullYear().toString();
+            // Month key: YYYY-MM
+            const mKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+            // Day key: YYYY-MM-DD
+            const dKey = t.date.split('T')[0];
+
+            if(!y[yKey]) y[yKey] = {inc: 0, exp: 0};
+            if(!m[mKey]) m[mKey] = {inc: 0, exp: 0};
+            if(!d[dKey]) d[dKey] = {inc: 0, exp: 0};
+
+            if(t.type === 'income') {
+                const amt = t.amount;
+                y[yKey].inc += amt;
+                m[mKey].inc += amt;
+                d[dKey].inc += amt;
+            } else if (t.type === 'expense') {
+                const amt = t.amount;
+                y[yKey].exp += amt;
+                m[mKey].exp += amt;
+                d[dKey].exp += amt;
+            }
+        });
+
+        return {
+            dailyStats: Object.entries(d).sort((a,b) => b[0].localeCompare(a[0])),
+            monthlyStats: Object.entries(m).sort((a,b) => b[0].localeCompare(a[0])),
+            yearlyStats: Object.entries(y).sort((a,b) => b[0].localeCompare(a[0]))
+        };
+    }, [transactions]);
 
     // --- Bazar Report Logic ---
     const allBazar = transactions.filter(t => t.category === Category.BAZAR);
@@ -471,26 +518,136 @@ const App: React.FC = () => {
          </div>
 
          {/* Toggle */}
-         <div className="flex p-1 bg-gray-100 dark:bg-gray-800 rounded-xl mb-8">
+         <div className="flex p-1 bg-gray-100 dark:bg-gray-800 rounded-xl mb-8 overflow-x-auto">
+             <button 
+                onClick={() => setReportView('summary')}
+                className={`flex-1 min-w-[100px] py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap ${reportView === 'summary' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}
+            >
+                <Calculator className="w-4 h-4" />
+                Sum & Totals
+            </button>
             <button 
                 onClick={() => setReportView('bazar')}
-                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${reportView === 'bazar' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}
+                className={`flex-1 min-w-[100px] py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap ${reportView === 'bazar' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}
             >
                 <ShoppingBag className="w-4 h-4" />
                 Bazar Report
             </button>
             <button 
                 onClick={() => setReportView('full')}
-                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${reportView === 'full' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}
+                className={`flex-1 min-w-[100px] py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap ${reportView === 'full' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}
             >
                 <List className="w-4 h-4" />
-                All Transactions
+                Full History
             </button>
          </div>
 
-         {reportView === 'bazar' ? (
+         {reportView === 'summary' && (
+             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {/* Yearly Section */}
+                <div>
+                   <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                       <CalendarRange className="w-5 h-5 text-indigo-500" /> 
+                       Yearly Summary
+                   </h3>
+                   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                       <div className="grid grid-cols-4 bg-gray-50 dark:bg-gray-900/50 p-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                           <div>Year</div>
+                           <div className="text-right">Income</div>
+                           <div className="text-right">Expense</div>
+                           <div className="text-right">Net</div>
+                       </div>
+                       <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                           {yearlyStats.length === 0 ? (
+                               <div className="p-4 text-center text-gray-400 text-sm">No data available</div>
+                           ) : yearlyStats.map(([year, stats]) => (
+                               <div key={year} className="grid grid-cols-4 p-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                   <div className="font-bold text-gray-900 dark:text-white">{year}</div>
+                                   <div className="text-right text-emerald-600 dark:text-emerald-400">{stats.inc > 0 ? `+${stats.inc.toLocaleString()}` : '-'}</div>
+                                   <div className="text-right text-rose-600 dark:text-rose-400">{stats.exp > 0 ? `-${stats.exp.toLocaleString()}` : '-'}</div>
+                                   <div className={`text-right font-medium ${stats.inc - stats.exp >= 0 ? 'text-gray-900 dark:text-white' : 'text-rose-600'}`}>
+                                       {(stats.inc - stats.exp).toLocaleString()}
+                                   </div>
+                               </div>
+                           ))}
+                       </div>
+                   </div>
+                </div>
+
+                {/* Monthly Section */}
+                <div>
+                   <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                       <Calendar className="w-5 h-5 text-blue-500" /> 
+                       Monthly Summary
+                   </h3>
+                   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                       <div className="grid grid-cols-4 bg-gray-50 dark:bg-gray-900/50 p-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                           <div>Month</div>
+                           <div className="text-right">Inc</div>
+                           <div className="text-right">Exp</div>
+                           <div className="text-right">Net</div>
+                       </div>
+                       <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-[300px] overflow-y-auto">
+                           {monthlyStats.length === 0 ? (
+                               <div className="p-4 text-center text-gray-400 text-sm">No data available</div>
+                           ) : monthlyStats.map(([monthKey, stats]) => {
+                               const [y, m] = monthKey.split('-');
+                               const date = new Date(parseInt(y), parseInt(m)-1);
+                               const display = date.toLocaleDateString('en-US', {month: 'short', year: '2-digit'});
+                               return (
+                                   <div key={monthKey} className="grid grid-cols-4 p-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                       <div className="font-medium text-gray-900 dark:text-white">{display}</div>
+                                       <div className="text-right text-emerald-600 dark:text-emerald-400">{stats.inc > 0 ? `${(stats.inc/1000).toFixed(1)}k` : '-'}</div>
+                                       <div className="text-right text-rose-600 dark:text-rose-400">{stats.exp > 0 ? `${(stats.exp/1000).toFixed(1)}k` : '-'}</div>
+                                       <div className={`text-right font-medium ${stats.inc - stats.exp >= 0 ? 'text-gray-700 dark:text-gray-300' : 'text-rose-600'}`}>
+                                           {((stats.inc - stats.exp)/1000).toFixed(1)}k
+                                       </div>
+                                   </div>
+                               );
+                           })}
+                       </div>
+                   </div>
+                </div>
+
+                {/* Daily Section */}
+                <div>
+                   <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                       <Clock className="w-5 h-5 text-amber-500" /> 
+                       Daily Summary (Last 30 Days)
+                   </h3>
+                   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                       <div className="grid grid-cols-4 bg-gray-50 dark:bg-gray-900/50 p-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                           <div>Date</div>
+                           <div className="text-right">Inc</div>
+                           <div className="text-right">Exp</div>
+                           <div className="text-right">Net</div>
+                       </div>
+                       <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-[400px] overflow-y-auto">
+                           {dailyStats.length === 0 ? (
+                               <div className="p-4 text-center text-gray-400 text-sm">No data available</div>
+                           ) : dailyStats.slice(0, 30).map(([dayKey, stats]) => {
+                               const date = new Date(dayKey);
+                               const display = date.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+                               return (
+                                   <div key={dayKey} className="grid grid-cols-4 p-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                       <div className="font-medium text-gray-900 dark:text-white">{display}</div>
+                                       <div className="text-right text-emerald-600 dark:text-emerald-400">{stats.inc > 0 ? stats.inc.toLocaleString() : '-'}</div>
+                                       <div className="text-right text-rose-600 dark:text-rose-400">{stats.exp > 0 ? stats.exp.toLocaleString() : '-'}</div>
+                                       <div className={`text-right font-medium ${stats.inc - stats.exp >= 0 ? 'text-gray-700 dark:text-gray-300' : 'text-rose-600'}`}>
+                                           {(stats.inc - stats.exp).toLocaleString()}
+                                       </div>
+                                   </div>
+                               );
+                           })}
+                       </div>
+                   </div>
+                </div>
+             </div>
+         )}
+
+         {reportView === 'bazar' && (
            <>
-            <div className="mt-4 mb-8 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800/50 flex justify-between items-center">
+            <div className="mt-4 mb-8 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800/50 flex justify-between items-center animate-in fade-in slide-in-from-bottom-2">
                <span className="font-medium text-indigo-900 dark:text-indigo-200">Total Bazar Spend (Lifetime)</span>
                <span className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">Tk {totalLifetimeBazar.toLocaleString()}</span>
             </div>
@@ -501,7 +658,7 @@ const App: React.FC = () => {
                   <p className="text-gray-500">No bazar records found.</p>
                </div>
              ) : (
-               <div className="space-y-12">
+               <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
                  {sortedMonths.map(monthKey => {
                    const monthlyTx = groupedByMonth[monthKey];
                    const monthlyTotal = monthlyTx.reduce((sum, t) => sum + t.amount, 0);
@@ -519,7 +676,7 @@ const App: React.FC = () => {
                    const sortedTimeKeys = Object.keys(groupedByTime).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
                    return (
-                     <div key={monthKey} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                     <div key={monthKey}>
                         <div className="flex items-center justify-between mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
                            <h3 className="font-bold text-xl text-gray-800 dark:text-gray-200">{monthTitle}</h3>
                            <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm font-bold text-gray-700 dark:text-gray-300">
@@ -570,7 +727,9 @@ const App: React.FC = () => {
                </div>
              )}
            </>
-         ) : (
+         )}
+
+         {reportView === 'full' && (
            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
              {transactions.length === 0 ? (
                 <div className="text-center py-12">
