@@ -7,7 +7,8 @@ export default defineConfig(({ mode }) => {
   
   // Create an object containing all env vars starting with FIREBASE_
   // and the specific API_KEY for GenAI
-  const processEnv = {
+  // Explicitly type as Record<string, string> to allow dynamic assignment
+  const processEnv: Record<string, string> = {
     'process.env.API_KEY': JSON.stringify(env.API_KEY),
   };
 
