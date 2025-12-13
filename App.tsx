@@ -34,7 +34,8 @@ import {
   LogOut,
   BarChart3,
   BarChartBig,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  HandCoins
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import ReactMarkdown from 'react-markdown';
@@ -417,16 +418,20 @@ const App: React.FC = () => {
 
       const totalSpent = thisMonthTxs.reduce((sum, t) => sum + t.amount, 0);
 
-      // Group by day for the list
-      const dailyTotals = useMemo(() => {
-          const groups: Record<string, number> = {};
+      // Group by day with items list
+      const dailyData = useMemo(() => {
+          const groups: Record<string, { total: number, items: Transaction[] }> = {};
           thisMonthTxs.forEach(t => {
               const dateKey = t.date.split('T')[0]; // YYYY-MM-DD
-              groups[dateKey] = (groups[dateKey] || 0) + t.amount;
+              if (!groups[dateKey]) {
+                  groups[dateKey] = { total: 0, items: [] };
+              }
+              groups[dateKey].total += t.amount;
+              groups[dateKey].items.push(t);
           });
           
           return Object.entries(groups)
-            .map(([date, amount]) => ({ date, amount }))
+            .map(([date, data]) => ({ date, ...data }))
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       }, [thisMonthTxs]);
 
@@ -451,33 +456,51 @@ const App: React.FC = () => {
                      Daily Breakdown
                  </h3>
                  
-                 {dailyTotals.length > 0 ? (
-                     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                         {dailyTotals.map((day, idx) => {
+                 {dailyData.length > 0 ? (
+                     <div className="space-y-4">
+                         {dailyData.map((day, idx) => {
                              const dateObj = new Date(day.date);
                              return (
-                                 <div key={idx} className="flex justify-between items-center p-4 border-b border-gray-100 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                     <div className="flex items-center gap-4">
-                                         <div className="flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg w-12 h-12">
-                                             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
-                                                {dateObj.toLocaleDateString('en-US', { month: 'short' })}
-                                             </span>
-                                             <span className="text-lg font-bold text-gray-800 dark:text-white leading-none">
-                                                {dateObj.getDate()}
-                                             </span>
+                                 <div key={idx} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                     {/* Header */}
+                                     <div className="flex justify-between items-center p-4 bg-gray-50/50 dark:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700">
+                                         <div className="flex items-center gap-4">
+                                             <div className="flex flex-col items-center justify-center bg-white dark:bg-gray-700 rounded-lg w-12 h-12 border border-gray-100 dark:border-gray-600 shadow-sm">
+                                                 <span className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase leading-none mb-0.5">
+                                                    {dateObj.toLocaleDateString('en-US', { month: 'short' })}
+                                                 </span>
+                                                 <span className="text-xl font-bold text-gray-800 dark:text-white leading-none">
+                                                    {dateObj.getDate()}
+                                                 </span>
+                                             </div>
+                                             <div>
+                                                 <p className="font-semibold text-gray-900 dark:text-white">
+                                                    {dateObj.toLocaleDateString('en-US', { weekday: 'long' })}
+                                                 </p>
+                                                 <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                    {day.items.length} items
+                                                 </p>
+                                             </div>
                                          </div>
-                                         <div>
-                                             <p className="font-medium text-gray-900 dark:text-white">
-                                                {dateObj.toLocaleDateString('en-US', { weekday: 'long' })}
-                                             </p>
-                                             <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                {day.amount.toLocaleString()} BDT
-                                             </p>
-                                         </div>
+                                         <span className="font-bold text-rose-600 dark:text-rose-400 text-lg">
+                                             Tk {day.total.toLocaleString()}
+                                         </span>
                                      </div>
-                                     <span className="font-bold text-gray-900 dark:text-white text-lg">
-                                         Tk {day.amount.toLocaleString()}
-                                     </span>
+                                     
+                                     {/* List */}
+                                     <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                                        {day.items.map((item, i) => (
+                                            <div key={item.id} className="flex justify-between items-center py-3 px-4 hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-medium text-gray-400 w-4">{i + 1}.</span>
+                                                    <p className="text-sm text-gray-700 dark:text-gray-200">{item.description}</p>
+                                                </div>
+                                                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                                    {item.amount.toLocaleString()}
+                                                </span>
+                                            </div>
+                                        ))}
+                                     </div>
                                  </div>
                              );
                          })}
@@ -748,6 +771,16 @@ const App: React.FC = () => {
                         <div className="h-px bg-gray-100 dark:bg-gray-700 my-1"></div>
 
                         <button 
+                             onClick={() => handleMenuAction(() => setActiveTab('lending'))}
+                             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        >
+                            <HandCoins className="w-4 h-4" />
+                            Lending Manager
+                        </button>
+
+                        <div className="h-px bg-gray-100 dark:bg-gray-700 my-1"></div>
+
+                        <button 
                             onClick={() => handleMenuAction(() => { setActiveTab('dashboard'); setDashboardPeriod('month'); })}
                             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
                         >
@@ -793,7 +826,13 @@ const App: React.FC = () => {
       </main>
 
       {/* Bottom Navigation */}
-      <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <BottomNavigation 
+        activeTab={activeTab} 
+        onTabChange={(tab: any) => {
+            setActiveTab(tab);
+            if (tab === 'dashboard') setDashboardPeriod('month');
+        }} 
+      />
     </div>
   );
 };

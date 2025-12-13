@@ -1,5 +1,5 @@
 import React from 'react';
-import { PlusCircle, ShoppingBag, FileClock, BarChartBig, HandCoins } from 'lucide-react';
+import { PlusCircle, ShoppingBag, FileClock, BarChartBig, Calendar } from 'lucide-react';
 
 interface BottomNavigationProps {
   activeTab: string;
@@ -36,18 +36,6 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab, onTabCha
         </button>
 
         <button
-          onClick={() => onTabChange('lending')}
-          className={`flex flex-col items-center gap-1 transition-colors min-w-[3.5rem] ${
-            activeTab === 'lending' ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
-          }`}
-        >
-          <div className={`p-1 rounded-full ${activeTab === 'lending' ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}`}>
-             <HandCoins className="w-6 h-6" />
-          </div>
-          <span className="text-[10px] font-medium">Lending</span>
-        </button>
-
-        <button
           onClick={() => onTabChange('bazar-report')}
           className={`flex flex-col items-center gap-1 transition-colors min-w-[3.5rem] ${
             activeTab === 'bazar-report' ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
@@ -56,7 +44,19 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab, onTabCha
           <div className={`p-1 rounded-full ${activeTab === 'bazar-report' ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}`}>
              <BarChartBig className="w-6 h-6" />
           </div>
-          <span className="text-[10px] font-medium">Report</span>
+          <span className="text-[10px] font-medium">Bazar Report</span>
+        </button>
+
+        <button
+          onClick={() => onTabChange('dashboard')}
+          className={`flex flex-col items-center gap-1 transition-colors min-w-[3.5rem] ${
+            activeTab === 'dashboard' ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+          }`}
+        >
+          <div className={`p-1 rounded-full ${activeTab === 'dashboard' ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}`}>
+             <Calendar className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-medium">Monthly</span>
         </button>
 
         <button
