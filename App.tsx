@@ -24,11 +24,9 @@ import {
   Calculator,
   CalendarRange,
   Calendar,
-  Download,
-  Cloud,
-  LogOut,
   User as UserIcon,
-  CheckCircle2
+  LogIn,
+  Download
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import ReactMarkdown from 'react-markdown';
@@ -37,7 +35,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { Transaction, TransactionType, FinancialSummary, AccountType, Category } from './types';
 import { getStoredTransactions, saveStoredTransactions } from './services/storage';
 import { getFinancialAdvice } from './services/geminiService';
-import { auth, signInWithGoogle, logout, saveUserData, getUserData } from './services/firebase';
+import { auth, signInWithGoogle, logout } from './services/firebase';
 import TransactionForm from './components/TransactionForm';
 import SummaryCard from './components/SummaryCard';
 import FinancialChart from './components/FinancialChart';
@@ -51,9 +49,8 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'input' | 'bazar' | 'report' | 'month' | 'year'>('input');
   const [accountFilter, setAccountFilter] = useState<'all' | 'salary' | 'savings' | 'cash'>('all');
   
-  // Auth & Sync State
+  // Auth State
   const [user, setUser] = useState<User | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
   
   // Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -105,37 +102,14 @@ const App: React.FC = () => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
-        setIsSyncing(true);
-        // On login, fetch data from cloud
-        const cloudData = await getUserData(currentUser.uid);
-        if (cloudData && cloudData.length > 0) {
-          // If cloud has data, we update local (User "Restore Progress" flow)
-          // Ideally, we might want to merge, but simple "Cloud wins on login" is safer for "Sync" mental model
-          setTransactions(cloudData);
-        } else {
-          // If cloud is empty but local has data, push local to cloud (First sync)
-          const localData = getStoredTransactions();
-          if (localData.length > 0) {
-            await saveUserData(currentUser.uid, localData);
-          }
-        }
-        setIsSyncing(false);
-      }
     });
     return () => unsubscribe();
   }, []);
 
-  // Save changes to Local Storage AND Firebase
+  // Save changes to Local Storage
   useEffect(() => {
-    // 1. Save to Local
     saveStoredTransactions(transactions);
-
-    // 2. Save to Cloud (Debounced slightly in logic, but direct here for simplicity)
-    if (user && transactions.length > 0) {
-      saveUserData(user.uid, transactions);
-    }
-  }, [transactions, user]);
+  }, [transactions]);
 
   const handleLogin = async () => {
     try {
@@ -690,7 +664,6 @@ const App: React.FC = () => {
              </div>
          )}
 
-         {/* ... Bazar and Full History views (same as before) ... */}
          {reportView === 'bazar' && <BazarPage />}
          {reportView === 'full' && (
            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -775,7 +748,7 @@ const App: React.FC = () => {
     const title = period === 'month' ? 'Monthly Overview' : 'Yearly Overview';
 
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 pb-20">
         
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -912,35 +885,33 @@ const App: React.FC = () => {
                                   ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
                                   : 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'
                             }`}>
-                              {t.type === 'income' ? <TrendingUp size={20} /> : t.type === 'transfer' ? <ArrowRightLeft size={20} /> : <TrendingDown size={20} />}
+                              {t.type === 'income' ? <TrendingUp className="w-5 h-5" /> : t.type === 'transfer' ? <ArrowRightLeft className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
                             </div>
                             <div>
                               <p className="font-medium text-gray-900 dark:text-white">{t.description}</p>
                               <div className="flex gap-2 text-xs text-gray-500 dark:text-gray-400">
                                 <span>{t.category}</span>
-                                {t.type === 'transfer' && (
-                                  <span className="flex items-center gap-1">
-                                     {t.accountId} 
-                                     <ArrowRightLeft className="w-3 h-3" />
-                                     {t.targetAccountId}
-                                  </span>
-                                )}
+                                <span>•</span>
+                                <span className="capitalize">{t.accountId}</span>
+                                {t.type === 'transfer' && <span>→ {t.targetAccountId}</span>}
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
-                            <span className={`font-semibold ${
+                            <span className={`font-bold ${
                               t.type === 'income' 
                                 ? 'text-emerald-600 dark:text-emerald-400' 
-                                : 'text-rose-600 dark:text-rose-400'
+                                : t.type === 'expense'
+                                  ? 'text-rose-600 dark:text-rose-400'
+                                  : 'text-gray-600 dark:text-gray-400'
                             }`}>
-                              {(t.type === 'income' || (t.type === 'transfer' && t.targetAccountId === accountFilter)) ? '+' : '-'} Tk {t.amount.toFixed(2)}
+                              {t.type === 'income' ? '+' : t.type === 'expense' ? '-' : ''} Tk {t.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
                             <button 
                               onClick={() => handleDeleteTransaction(t.id)}
-                              className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1"
                             >
-                              <Trash2 size={18} />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -948,48 +919,65 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 ))}
-                {filtered.length === 0 && (
-                   <p className="text-center text-gray-400 dark:text-gray-500 py-8">No transactions found.</p>
-                )}
               </div>
             </div>
           </div>
 
-          {/* Sidebar: AI Advisor */}
-          <div className="space-y-8">
-             <div className="bg-gradient-to-br from-indigo-900 to-indigo-800 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg p-6 text-white overflow-hidden relative border border-transparent dark:border-gray-700">
-              <div className="absolute top-0 right-0 p-32 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-              
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-white/10 rounded-lg backdrop-blur-md">
-                    <Bot className="w-6 h-6 text-indigo-200 dark:text-indigo-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold">Financial Advisor</h3>
-                </div>
-
-                <div className="min-h-[120px] mb-4 text-indigo-100 dark:text-gray-300 text-sm leading-relaxed bg-white/5 rounded-lg p-4 border border-white/10">
-                   {isAiLoading ? (
-                     <div className="flex items-center gap-2 animate-pulse">
-                       <RefreshCw className="w-4 h-4 animate-spin" />
-                       Thinking...
-                     </div>
-                   ) : aiAdvice ? (
-                     <ReactMarkdown>{aiAdvice}</ReactMarkdown>
-                   ) : (
-                     <p>Get personalized insights on your spending habits. Analyze your {period}ly data to find savings opportunities.</p>
-                   )}
-                </div>
-
-                <button
-                  onClick={handleGetAdvice}
-                  disabled={isAiLoading || transactions.length === 0}
-                  className="w-full bg-white text-indigo-900 dark:bg-indigo-600 dark:text-white dark:hover:bg-indigo-700 font-medium py-2 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isAiLoading ? 'Analyzing...' : 'Analyze My Finances'}
-                </button>
+          {/* Sidebar: AI Advice & Install App */}
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl p-6 text-white shadow-lg">
+              <div className="flex items-center gap-2 mb-4">
+                <Bot className="w-6 h-6" />
+                <h3 className="font-bold text-lg">AI Financial Advisor</h3>
               </div>
+              <p className="text-indigo-100 text-sm mb-6 leading-relaxed">
+                Get personalized insights about your spending habits and savings opportunities powered by Gemini AI.
+              </p>
+              
+              {aiAdvice && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 mb-4 text-sm leading-relaxed border border-white/20">
+                  <ReactMarkdown>{aiAdvice}</ReactMarkdown>
+                </div>
+              )}
+
+              <button
+                onClick={handleGetAdvice}
+                disabled={isAiLoading || transactions.length === 0}
+                className="w-full bg-white text-indigo-600 font-semibold py-2.5 rounded-lg hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAiLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Bot className="w-4 h-4" />
+                    Generate Insights
+                  </>
+                )}
+              </button>
             </div>
+
+            {deferredPrompt && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-full text-blue-600 dark:text-blue-400">
+                    <Download className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Install App</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Install SmartSpend on your home screen for quick access.</p>
+                    <button 
+                      onClick={handleInstallClick}
+                      className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                    >
+                      Install Now →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -997,74 +985,59 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 pb-24 transition-colors duration-200">
-      {/* Top Header */}
-      <header className="bg-indigo-700 dark:bg-gray-800 text-white py-4 px-4 shadow-md sticky top-0 z-40 transition-colors duration-200">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Wallet className="w-6 h-6 text-indigo-200 dark:text-indigo-400" />
-            <h1 className="text-lg font-bold tracking-tight">SmartSpend</h1>
+            <div className="bg-indigo-600 p-2 rounded-lg">
+              <Wallet className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400">
+              SmartSpend
+            </h1>
           </div>
-          <div className="flex items-center gap-2">
-            
-            {/* Sync / Auth Buttons */}
-            {user ? (
-               <div className="flex items-center gap-2 mr-1">
-                 {isSyncing ? (
-                   <div className="flex items-center gap-1 bg-white/10 text-xs px-2 py-1 rounded-full animate-pulse">
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      Syncing...
-                   </div>
-                 ) : (
-                   <div className="bg-green-500/20 text-green-100 text-xs px-2 py-1 rounded-full flex items-center gap-1 border border-green-500/30">
-                      <CheckCircle2 className="w-3 h-3 text-green-400" />
-                      Synced
-                   </div>
-                 )}
-                 <button 
-                   onClick={handleLogout}
-                   className="p-1.5 hover:bg-white/10 rounded-full transition-colors"
-                   title="Logout"
-                 >
-                   {user.photoURL ? (
-                     <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full border-2 border-indigo-200" />
-                   ) : (
-                     <UserIcon className="w-5 h-5 text-indigo-100" />
-                   )}
-                 </button>
-               </div>
-            ) : (
-              <button 
-                onClick={handleLogin}
-                className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-colors mr-1"
-                title="Sign in to sync"
-              >
-                <Cloud className="w-3.5 h-3.5" />
-                Sign In
-              </button>
-            )}
 
-            {deferredPrompt && (
-              <button 
-                onClick={handleInstallClick}
-                className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-colors mr-1"
+          <div className="flex items-center gap-3">
+             <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+              aria-label="Toggle Theme"
+            >
+              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+            </button>
+            
+            {user ? (
+              <div className="flex items-center gap-3 pl-3 border-l border-gray-200 dark:border-gray-700">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-600" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                )}
+                <button
+                  onClick={handleLogout}
+                  className="hidden sm:block text-sm font-medium text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleLogin}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
               >
-                <Download className="w-3.5 h-3.5" />
-                Install
+                <LogIn className="w-4 h-4" />
+                <span className="hidden sm:inline">Sign In</span>
               </button>
             )}
-            <button 
-              onClick={toggleTheme}
-              className="p-2 rounded-full hover:bg-white/10 transition-colors"
-              aria-label="Toggle theme"
-            >
-              {theme === 'light' ? <Moon className="w-5 h-5 text-indigo-100" /> : <Sun className="w-5 h-5 text-yellow-300" />}
-            </button>
           </div>
         </div>
       </header>
 
-      <main>
+      {/* Main Content Area */}
+      <main className="transition-all duration-300">
         {activeTab === 'input' && <InputPage />}
         {activeTab === 'bazar' && <BazarPage />}
         {activeTab === 'report' && <ReportPage />}
@@ -1072,6 +1045,7 @@ const App: React.FC = () => {
         {activeTab === 'year' && <DashboardView period="year" />}
       </main>
 
+      {/* Bottom Navigation */}
       <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );

@@ -1,7 +1,5 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut } from "firebase/auth";
-import { getDatabase, ref, set, get, child } from "firebase/database";
-import { Transaction } from "../types";
 
 // Helper to check if a string is non-empty
 const hasValue = (val: string | undefined) => val && val !== "" && val !== "undefined";
@@ -15,28 +13,25 @@ const firebaseConfig = {
   storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.FIREBASE_APP_ID,
-  databaseURL: process.env.FIREBASE_DATABASE_URL
 };
 
 // Initialize Firebase only if config exists and is valid
 let app;
 let auth: any = null;
-let db: any = null;
 
 try {
   // Check if critical keys exist before initializing
   if (hasValue(firebaseConfig.apiKey) && hasValue(firebaseConfig.authDomain)) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-    db = getDatabase(app);
   } else {
-    console.warn("Firebase config missing. Cloud sync disabled.");
+    console.warn("Firebase config missing. Auth disabled.");
   }
 } catch (error) {
   console.error("Firebase initialization failed:", error);
 }
 
-export { auth, db };
+export { auth };
 
 export const signInWithGoogle = async () => {
   if (!auth) {
@@ -59,34 +54,5 @@ export const logout = async () => {
     await firebaseSignOut(auth);
   } catch (error) {
     console.error("Error signing out", error);
-  }
-};
-
-export const saveUserData = async (userId: string, transactions: Transaction[]) => {
-  if (!db) return;
-  try {
-    await set(ref(db, 'users/' + userId), {
-      transactions: transactions,
-      lastUpdated: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error("Error saving data", error);
-  }
-};
-
-export const getUserData = async (userId: string): Promise<Transaction[] | null> => {
-  if (!db) return null;
-  try {
-    const dbRef = ref(db);
-    const snapshot = await get(child(dbRef, `users/${userId}`));
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      return data.transactions || [];
-    } else {
-      return null;
-    }
-  } catch (error) {
-    console.error("Error fetching data", error);
-    return null;
   }
 };
