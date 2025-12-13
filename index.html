@@ -40,18 +40,15 @@
         font-family: 'Inter', sans-serif;
       }
     </style>
-    <!-- Register Service Worker -->
+    <!-- Service Worker Cleanup: Force unregister to fix caching issues -->
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          // Added version query param to force browser to check for new SW file
-          navigator.serviceWorker.register('/sw.js?v=2')
-            .then(registration => {
-              console.log('SW registered: ', registration);
-            })
-            .catch(registrationError => {
-              console.log('SW registration failed: ', registrationError);
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister().then(function(boolean) {
+                console.log('Service Worker unregistered: ', boolean);
             });
+          }
         });
       }
     </script>

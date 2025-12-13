@@ -30,10 +30,13 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         let cleaned = text.trim();
         
         // Remove "const firebaseConfig =" or similar
+        // Finds the first equals sign and takes everything after it
         if (cleaned.includes('=')) {
             cleaned = cleaned.substring(cleaned.indexOf('=') + 1);
         }
+        
         // Remove trailing semicolon
+        cleaned = cleaned.trim();
         if (cleaned.endsWith(';')) {
             cleaned = cleaned.substring(0, cleaned.length - 1);
         }
@@ -49,6 +52,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
                 return result;
             }
         } catch (e2) {
+            console.error("Eval error:", e2);
             throw new Error("Could not parse configuration. Please ensure it is a valid JSON or JavaScript object.");
         }
     }
@@ -66,8 +70,11 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         const config = parseInput(input);
         
         // Basic validation
-        if (!config.apiKey || !config.projectId) {
-            throw new Error("Missing required fields (apiKey, projectId)");
+        if (!config.apiKey) {
+            throw new Error("Invalid config: Missing apiKey");
+        }
+        if (!config.projectId) {
+            throw new Error("Invalid config: Missing projectId");
         }
 
         saveFirebaseConfig(config);
@@ -104,7 +111,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
         
         <div className="p-6 overflow-y-auto">
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
-                Paste your Firebase configuration object below. You can copy it directly from the Firebase Console project settings.
+                Paste your Firebase configuration below. You can paste the code directly from the Firebase console (including <code>const firebaseConfig = ...</code>).
             </p>
 
             {error && (
@@ -118,8 +125,13 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => {
                 <textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder={`const firebaseConfig = {\n  apiKey: "AIzaSy...",\n  authDomain: "..."\n};`}
-                    className="w-full h-64 p-4 font-mono text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none text-gray-800 dark:text-gray-200"
+                    placeholder={`const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "...",
+  projectId: "...",
+  // ...
+};`}
+                    className="w-full h-64 p-4 font-mono text-xs sm:text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none text-gray-800 dark:text-gray-200"
                     spellCheck={false}
                 />
             </div>

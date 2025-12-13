@@ -2,7 +2,8 @@ import firebase from "firebase/compat/app";
 import "firebase/compat/auth";
 import "firebase/compat/firestore";
 
-const CONFIG_KEY = 'smartspend_firebase_config';
+// Changed key to v2 to force fresh start if v1 had corrupted data
+const CONFIG_KEY = 'smartspend_firebase_config_v2';
 
 let auth: firebase.auth.Auth | undefined;
 let db: firebase.firestore.Firestore | undefined;
@@ -12,7 +13,14 @@ let isInitialized = false;
 export const getStoredFirebaseConfig = () => {
   try {
     const stored = localStorage.getItem(CONFIG_KEY);
-    return stored ? JSON.parse(stored) : null;
+    if (!stored) return null;
+    
+    const parsed = JSON.parse(stored);
+    // Basic validation to ensure it's a real config object
+    if (parsed && typeof parsed === 'object' && parsed.apiKey) {
+        return parsed;
+    }
+    return null;
   } catch (e) {
     console.error("Failed to parse stored config", e);
     return null;
@@ -42,6 +50,7 @@ try {
     
     // Only initialize if we have a config and no apps are running
     if (config && !firebase.apps.length) {
+        console.log("Initializing Firebase with stored config...");
         firebase.initializeApp(config);
     }
     
@@ -51,6 +60,8 @@ try {
         db = firebase.firestore();
         isInitialized = true;
         console.log("Firebase initialized successfully");
+    } else {
+        console.log("Firebase waiting for configuration...");
     }
 } catch (error) {
     console.error("Firebase initialization failed:", error);
