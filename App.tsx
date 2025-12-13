@@ -148,8 +148,11 @@ const App: React.FC = () => {
     const currentYear = now.getFullYear();
 
     return transactions.filter(t => {
+      if (!t.date) return false;
       // Date Filter
       const tDate = new Date(t.date);
+      if (isNaN(tDate.getTime())) return false;
+
       let dateMatch = true;
       if (period === 'month') {
         dateMatch = tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;
@@ -222,6 +225,7 @@ const App: React.FC = () => {
   // Helper to group by Minute (Date + Time)
   const getGroupKey = (dateStr: string) => {
     const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return new Date().toISOString();
     date.setSeconds(0, 0); // Ignore seconds for grouping 'same time'
     return date.toISOString();
   };
@@ -256,11 +260,12 @@ const App: React.FC = () => {
     const monthName = now.toLocaleDateString('en-US', { month: 'long' });
 
     // Filter for Bazar category this month
-    const bazarTransactions = transactions.filter(t => 
-      t.category === Category.BAZAR && 
-      new Date(t.date).getMonth() === currentMonth &&
-      new Date(t.date).getFullYear() === currentYear
-    );
+    const bazarTransactions = transactions.filter(t => {
+      if (!t.date || t.category !== Category.BAZAR) return false;
+      const d = new Date(t.date);
+      if (isNaN(d.getTime())) return false;
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
 
     const totalBazarSpend = bazarTransactions.reduce((sum, t) => sum + t.amount, 0);
 
@@ -444,13 +449,16 @@ const App: React.FC = () => {
         const y: Record<string, {inc: number, exp: number}> = {};
 
         transactions.forEach(t => {
+            if (!t.date) return;
+            const date = new Date(t.date);
+            if (isNaN(date.getTime())) return;
+
             // We focus on Income and Expense for the summary tables.
             // Transfers are excluded from "Spending/Earning" totals to avoid double counting, 
             // unless you want to track cash flow specifically. 
             // Here we adhere to "Expend" and "Income".
             if (t.type === 'transfer') return;
 
-            const date = new Date(t.date);
             const yKey = date.getFullYear().toString();
             // Month key: YYYY-MM
             const mKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
@@ -486,6 +494,7 @@ const App: React.FC = () => {
     const groupedByMonth = useMemo(() => {
       const groups: Record<string, Transaction[]> = {};
       allBazar.forEach(t => {
+        if (!t.date) return;
         const monthKey = t.date.slice(0, 7); // YYYY-MM
         if (!groups[monthKey]) groups[monthKey] = [];
         groups[monthKey].push(t);
@@ -499,6 +508,7 @@ const App: React.FC = () => {
     const groupedAll = useMemo(() => {
         const groups: Record<string, Transaction[]> = {};
         transactions.forEach(t => {
+            if (!t.date) return;
             const dateKey = t.date.split('T')[0];
             if (!groups[dateKey]) groups[dateKey] = [];
             groups[dateKey].push(t);
@@ -802,6 +812,7 @@ const App: React.FC = () => {
     const grouped = useMemo(() => {
       const groups: Record<string, Transaction[]> = {};
       filtered.forEach(t => {
+        if (!t.date) return;
         const dateKey = t.date.split('T')[0]; // Using safe date split to handle potential time components
         if (!groups[dateKey]) groups[dateKey] = [];
         groups[dateKey].push(t);
