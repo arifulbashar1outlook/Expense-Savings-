@@ -35,7 +35,8 @@ import {
   BarChart3,
   BarChartBig,
   PieChart as PieChartIcon,
-  HandCoins
+  HandCoins,
+  Check
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import ReactMarkdown from 'react-markdown';
@@ -63,6 +64,299 @@ import ConfigModal from './components/ConfigModal';
 import LendingView from './components/LendingView';
 import BazarView from './components/BazarView';
 import HistoryView from './components/HistoryView';
+
+// Reusable Report View Component with Edit/Delete capabilities
+interface ReportViewProps {
+  title: string;
+  icon: React.ElementType;
+  transactions: Transaction[];
+  filterFn: (t: Transaction) => boolean;
+  onUpdateTransaction: (t: Transaction) => void;
+  onDeleteTransaction: (id: string) => void;
+  colorClass: string;
+  bgClass: string;
+  totalLabel: string;
+  emptyMessage: string;
+}
+
+const ReportView: React.FC<ReportViewProps> = ({ 
+  title, 
+  icon: Icon, 
+  transactions, 
+  filterFn, 
+  onUpdateTransaction, 
+  onDeleteTransaction,
+  colorClass,
+  bgClass,
+  totalLabel,
+  emptyMessage
+}) => {
+    const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+    const [editDesc, setEditDesc] = useState('');
+    const [editAmount, setEditAmount] = useState('');
+    const [editDate, setEditDate] = useState('');
+    const [editAccount, setEditAccount] = useState<AccountType>('cash');
+    const [editCategory, setEditCategory] = useState<string>('');
+    const [editType, setEditType] = useState<TransactionType>('expense');
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    const filteredTxs = transactions.filter(filterFn);
+    
+    const thisMonthTxs = filteredTxs.filter(t => {
+        if (!t.date) return false;
+        const d = new Date(t.date);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    const totalSpent = thisMonthTxs.reduce((sum, t) => sum + t.amount, 0);
+
+    const dailyData = useMemo(() => {
+        const groups: Record<string, { total: number, items: Transaction[] }> = {};
+        thisMonthTxs.forEach(t => {
+            const dateKey = t.date.split('T')[0];
+            if (!groups[dateKey]) {
+                groups[dateKey] = { total: 0, items: [] };
+            }
+            groups[dateKey].total += t.amount;
+            groups[dateKey].items.push(t);
+        });
+        
+        return Object.entries(groups)
+          .map(([date, data]) => ({ date, ...data }))
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [thisMonthTxs]);
+
+    const startEditing = (t: Transaction) => {
+        setEditingTx(t);
+        setEditDesc(t.description);
+        setEditAmount(t.amount.toString());
+        try {
+            const d = new Date(t.date);
+            const localIso = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+            setEditDate(localIso);
+        } catch (e) {
+            setEditDate(new Date().toISOString().slice(0, 16));
+        }
+        setEditAccount(t.accountId);
+        setEditCategory(t.category);
+        setEditType(t.type);
+    };
+
+    const saveEdit = () => {
+        if (!editingTx || !editDesc || !editAmount) return;
+        
+        const updatedTx: Transaction = {
+            ...editingTx,
+            description: editDesc,
+            amount: parseFloat(editAmount),
+            date: new Date(editDate).toISOString(),
+            accountId: editAccount,
+            category: editCategory,
+            type: editType
+        };
+
+        onUpdateTransaction(updatedTx);
+        setEditingTx(null);
+    };
+
+    const handleDelete = () => {
+        if (editingTx) {
+            if (confirm("Are you sure you want to delete this transaction?")) {
+                onDeleteTransaction(editingTx.id);
+                setEditingTx(null);
+            }
+        }
+    };
+
+    return (
+        <div className="max-w-2xl mx-auto px-4 py-8 pb-24 relative">
+           {/* Edit Modal */}
+           {editingTx && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center shrink-0">
+                        <h3 className="font-bold text-gray-900 dark:text-white">Edit Transaction</h3>
+                        <button onClick={() => setEditingTx(null)} className="text-gray-400 hover:text-gray-600">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-4 space-y-3 overflow-y-auto">
+                        <div>
+                            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Description</label>
+                            <input 
+                                type="text" 
+                                value={editDesc}
+                                onChange={(e) => setEditDesc(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                             <div>
+                                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Amount</label>
+                                <input 
+                                    type="number" 
+                                    value={editAmount}
+                                    onChange={(e) => setEditAmount(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                             </div>
+                             <div>
+                                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Type</label>
+                                <select
+                                    value={editType}
+                                    onChange={(e) => setEditType(e.target.value as TransactionType)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                >
+                                    <option value="expense">Expense</option>
+                                    <option value="income">Income</option>
+                                    <option value="transfer">Transfer</option>
+                                </select>
+                             </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                             <div>
+                                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Account</label>
+                                <select
+                                    value={editAccount}
+                                    onChange={(e) => setEditAccount(e.target.value as AccountType)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                >
+                                    <option value="salary">Salary</option>
+                                    <option value="savings">Savings</option>
+                                    <option value="cash">Cash</option>
+                                </select>
+                             </div>
+                             <div>
+                                <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Category</label>
+                                <select
+                                    value={editCategory}
+                                    onChange={(e) => setEditCategory(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                >
+                                    {Object.values(Category).map((cat) => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                    {!Object.values(Category).includes(editCategory as Category) && (
+                                        <option value={editCategory}>{editCategory}</option>
+                                    )}
+                                </select>
+                             </div>
+                        </div>
+                         <div>
+                            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Date & Time</label>
+                            <input 
+                                type="datetime-local" 
+                                value={editDate}
+                                onChange={(e) => setEditDate(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                            />
+                        </div>
+                    </div>
+                    <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-between gap-3 bg-gray-50 dark:bg-gray-800/50 shrink-0">
+                        <button 
+                            onClick={handleDelete}
+                            className="text-red-600 hover:text-red-700 dark:text-red-400 text-sm font-medium flex items-center gap-2 px-2"
+                        >
+                            <Trash2 className="w-4 h-4" /> Delete
+                        </button>
+                        <div className="flex gap-2">
+                             <button onClick={() => setEditingTx(null)} className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
+                             <button onClick={saveEdit} className="px-4 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium flex items-center justify-center gap-2">
+                                <Check className="w-4 h-4" /> Save
+                             </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+           )}
+
+           <div className="mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Icon className={`w-6 h-6 ${colorClass}`} />
+                  {title}
+              </h2>
+              <p className="text-gray-500 dark:text-gray-400">Monthly Analysis: {now.toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</p>
+           </div>
+
+           <div className={`${bgClass} p-6 rounded-xl border border-gray-100 dark:border-gray-700 mb-8 flex flex-col items-center justify-center text-center`}>
+               <p className={`text-sm font-medium mb-2 uppercase tracking-wide opacity-80 ${colorClass}`}>{totalLabel}</p>
+               <p className={`text-4xl font-extrabold ${colorClass}`}>Tk {totalSpent.toLocaleString()}</p>
+           </div>
+
+           <div className="space-y-4">
+               <h3 className="font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                   <CalendarDays className="w-5 h-5 text-gray-500" />
+                   Daily Breakdown
+               </h3>
+               
+               {dailyData.length > 0 ? (
+                   <div className="space-y-4">
+                       {dailyData.map((day, idx) => {
+                           const dateObj = new Date(day.date);
+                           return (
+                               <div key={idx} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                   {/* Header */}
+                                   <div className="flex justify-between items-center p-4 bg-gray-50/50 dark:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700">
+                                       <div className="flex items-center gap-4">
+                                           <div className="flex flex-col items-center justify-center bg-white dark:bg-gray-700 rounded-lg w-12 h-12 border border-gray-100 dark:border-gray-600 shadow-sm">
+                                               <span className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase leading-none mb-0.5">
+                                                  {dateObj.toLocaleDateString('en-US', { month: 'short' })}
+                                               </span>
+                                               <span className="text-xl font-bold text-gray-800 dark:text-white leading-none">
+                                                  {dateObj.getDate()}
+                                               </span>
+                                           </div>
+                                           <div>
+                                               <p className="font-semibold text-gray-900 dark:text-white">
+                                                  {dateObj.toLocaleDateString('en-US', { weekday: 'long' })}
+                                               </p>
+                                               <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                  {day.items.length} items
+                                               </p>
+                                           </div>
+                                       </div>
+                                       <span className={`font-bold text-lg ${colorClass}`}>
+                                           Tk {day.total.toLocaleString()}
+                                       </span>
+                                   </div>
+                                   
+                                   {/* List */}
+                                   <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                                      {day.items.map((item, i) => (
+                                          <div 
+                                            key={item.id} 
+                                            onClick={() => startEditing(item)}
+                                            className="flex justify-between items-center py-3 px-4 hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors cursor-pointer"
+                                          >
+                                              <div className="flex items-center gap-3">
+                                                  <span className="text-xs font-medium text-gray-400 w-4">{i + 1}.</span>
+                                                  <div>
+                                                      <p className="text-sm text-gray-700 dark:text-gray-200">{item.description}</p>
+                                                      {item.category && <p className="text-[10px] text-gray-400">{item.category}</p>}
+                                                  </div>
+                                              </div>
+                                              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                                  {item.amount.toLocaleString()}
+                                              </span>
+                                          </div>
+                                      ))}
+                                   </div>
+                               </div>
+                           );
+                       })}
+                   </div>
+               ) : (
+                   <div className="text-center py-10 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                       <p className="text-gray-500">{emptyMessage}</p>
+                   </div>
+               )}
+           </div>
+        </div>
+    );
+};
 
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -409,232 +703,6 @@ const App: React.FC = () => {
     </div>
   );
 
-  const BazarReportPage = () => {
-      const now = new Date();
-      const currentMonth = now.getMonth();
-      const currentYear = now.getFullYear();
-      
-      const bazarTxs = transactions.filter(t => t.category === Category.BAZAR);
-      
-      const thisMonthTxs = bazarTxs.filter(t => {
-          const d = new Date(t.date);
-          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-      });
-
-      const totalSpent = thisMonthTxs.reduce((sum, t) => sum + t.amount, 0);
-
-      // Group by day with items list
-      const dailyData = useMemo(() => {
-          const groups: Record<string, { total: number, items: Transaction[] }> = {};
-          thisMonthTxs.forEach(t => {
-              const dateKey = t.date.split('T')[0]; // YYYY-MM-DD
-              if (!groups[dateKey]) {
-                  groups[dateKey] = { total: 0, items: [] };
-              }
-              groups[dateKey].total += t.amount;
-              groups[dateKey].items.push(t);
-          });
-          
-          return Object.entries(groups)
-            .map(([date, data]) => ({ date, ...data }))
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      }, [thisMonthTxs]);
-
-      return (
-          <div className="max-w-2xl mx-auto px-4 py-8 pb-24">
-             <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <BarChartBig className="w-6 h-6 text-rose-500" />
-                    Bazar Report
-                </h2>
-                <p className="text-gray-500 dark:text-gray-400">Monthly Analysis: {now.toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</p>
-             </div>
-
-             <div className="bg-rose-50 dark:bg-rose-900/20 p-6 rounded-xl border border-rose-100 dark:border-rose-800 mb-8 flex flex-col items-center justify-center text-center">
-                 <p className="text-sm text-rose-600 dark:text-rose-400 font-medium mb-2 uppercase tracking-wide">Total Spent This Month</p>
-                 <p className="text-4xl font-extrabold text-rose-700 dark:text-rose-300">Tk {totalSpent.toLocaleString()}</p>
-             </div>
-
-             <div className="space-y-4">
-                 <h3 className="font-semibold text-gray-800 dark:text-white flex items-center gap-2">
-                     <CalendarDays className="w-5 h-5 text-gray-500" />
-                     Daily Breakdown
-                 </h3>
-                 
-                 {dailyData.length > 0 ? (
-                     <div className="space-y-4">
-                         {dailyData.map((day, idx) => {
-                             const dateObj = new Date(day.date);
-                             return (
-                                 <div key={idx} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                                     {/* Header */}
-                                     <div className="flex justify-between items-center p-4 bg-gray-50/50 dark:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700">
-                                         <div className="flex items-center gap-4">
-                                             <div className="flex flex-col items-center justify-center bg-white dark:bg-gray-700 rounded-lg w-12 h-12 border border-gray-100 dark:border-gray-600 shadow-sm">
-                                                 <span className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase leading-none mb-0.5">
-                                                    {dateObj.toLocaleDateString('en-US', { month: 'short' })}
-                                                 </span>
-                                                 <span className="text-xl font-bold text-gray-800 dark:text-white leading-none">
-                                                    {dateObj.getDate()}
-                                                 </span>
-                                             </div>
-                                             <div>
-                                                 <p className="font-semibold text-gray-900 dark:text-white">
-                                                    {dateObj.toLocaleDateString('en-US', { weekday: 'long' })}
-                                                 </p>
-                                                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                    {day.items.length} items
-                                                 </p>
-                                             </div>
-                                         </div>
-                                         <span className="font-bold text-rose-600 dark:text-rose-400 text-lg">
-                                             Tk {day.total.toLocaleString()}
-                                         </span>
-                                     </div>
-                                     
-                                     {/* List */}
-                                     <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
-                                        {day.items.map((item, i) => (
-                                            <div key={item.id} className="flex justify-between items-center py-3 px-4 hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xs font-medium text-gray-400 w-4">{i + 1}.</span>
-                                                    <p className="text-sm text-gray-700 dark:text-gray-200">{item.description}</p>
-                                                </div>
-                                                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                                    {item.amount.toLocaleString()}
-                                                </span>
-                                            </div>
-                                        ))}
-                                     </div>
-                                 </div>
-                             );
-                         })}
-                     </div>
-                 ) : (
-                     <div className="text-center py-10 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-                         <p className="text-gray-500">No records for this month.</p>
-                     </div>
-                 )}
-             </div>
-          </div>
-      );
-  };
-
-  const ExpenseReportPage = () => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    
-    // Filter for ALL expenses (including Bazar which is type='expense')
-    const expenseTxs = transactions.filter(t => t.type === 'expense');
-    
-    const thisMonthTxs = expenseTxs.filter(t => {
-        const d = new Date(t.date);
-        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    });
-
-    const totalSpent = thisMonthTxs.reduce((sum, t) => sum + t.amount, 0);
-
-    // Group by day with items list
-    const dailyData = useMemo(() => {
-        const groups: Record<string, { total: number, items: Transaction[] }> = {};
-        thisMonthTxs.forEach(t => {
-            const dateKey = t.date.split('T')[0]; // YYYY-MM-DD
-            if (!groups[dateKey]) {
-                groups[dateKey] = { total: 0, items: [] };
-            }
-            groups[dateKey].total += t.amount;
-            groups[dateKey].items.push(t);
-        });
-        
-        return Object.entries(groups)
-          .map(([date, data]) => ({ date, ...data }))
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [thisMonthTxs]);
-
-    return (
-        <div className="max-w-2xl mx-auto px-4 py-8 pb-24">
-           <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Receipt className="w-6 h-6 text-purple-500" />
-                  Expense Report
-              </h2>
-              <p className="text-gray-500 dark:text-gray-400">Monthly Analysis: {now.toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</p>
-           </div>
-
-           <div className="bg-purple-50 dark:bg-purple-900/20 p-6 rounded-xl border border-purple-100 dark:border-purple-800 mb-8 flex flex-col items-center justify-center text-center">
-               <p className="text-sm text-purple-600 dark:text-purple-400 font-medium mb-2 uppercase tracking-wide">Total Expenses This Month</p>
-               <p className="text-4xl font-extrabold text-purple-700 dark:text-purple-300">Tk {totalSpent.toLocaleString()}</p>
-           </div>
-
-           <div className="space-y-4">
-               <h3 className="font-semibold text-gray-800 dark:text-white flex items-center gap-2">
-                   <CalendarDays className="w-5 h-5 text-gray-500" />
-                   Daily Breakdown
-               </h3>
-               
-               {dailyData.length > 0 ? (
-                   <div className="space-y-4">
-                       {dailyData.map((day, idx) => {
-                           const dateObj = new Date(day.date);
-                           return (
-                               <div key={idx} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                                   {/* Header */}
-                                   <div className="flex justify-between items-center p-4 bg-gray-50/50 dark:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700">
-                                       <div className="flex items-center gap-4">
-                                           <div className="flex flex-col items-center justify-center bg-white dark:bg-gray-700 rounded-lg w-12 h-12 border border-gray-100 dark:border-gray-600 shadow-sm">
-                                               <span className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase leading-none mb-0.5">
-                                                  {dateObj.toLocaleDateString('en-US', { month: 'short' })}
-                                               </span>
-                                               <span className="text-xl font-bold text-gray-800 dark:text-white leading-none">
-                                                  {dateObj.getDate()}
-                                               </span>
-                                           </div>
-                                           <div>
-                                               <p className="font-semibold text-gray-900 dark:text-white">
-                                                  {dateObj.toLocaleDateString('en-US', { weekday: 'long' })}
-                                               </p>
-                                               <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                  {day.items.length} items
-                                               </p>
-                                           </div>
-                                       </div>
-                                       <span className="font-bold text-purple-600 dark:text-purple-400 text-lg">
-                                           Tk {day.total.toLocaleString()}
-                                       </span>
-                                   </div>
-                                   
-                                   {/* List */}
-                                   <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
-                                      {day.items.map((item, i) => (
-                                          <div key={item.id} className="flex justify-between items-center py-3 px-4 hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
-                                              <div className="flex items-center gap-3">
-                                                  <span className="text-xs font-medium text-gray-400 w-4">{i + 1}.</span>
-                                                  <div>
-                                                      <p className="text-sm text-gray-700 dark:text-gray-200">{item.description}</p>
-                                                      <p className="text-[10px] text-gray-400">{item.category}</p>
-                                                  </div>
-                                              </div>
-                                              <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                                  {item.amount.toLocaleString()}
-                                              </span>
-                                          </div>
-                                      ))}
-                                   </div>
-                               </div>
-                           );
-                       })}
-                   </div>
-               ) : (
-                   <div className="text-center py-10 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-                       <p className="text-gray-500">No expense records for this month.</p>
-                   </div>
-               )}
-           </div>
-        </div>
-    );
-  };
-
   const DashboardView = ({ period }: { period: 'month' | 'year' }) => {
     const filtered = useMemo(() => getFilteredTransactions(period, accountFilter), [period, transactions, accountFilter]);
     const summary = useMemo(() => getSummary(filtered), [filtered, accountFilter, accountBalances]);
@@ -939,8 +1007,34 @@ const App: React.FC = () => {
       <main className="transition-all duration-300">
         {activeTab === 'input' && <InputPage />}
         {activeTab === 'bazar' && <BazarView transactions={transactions} onAddTransaction={handleAddTransaction} onUpdateTransaction={handleUpdateTransaction} onDeleteTransaction={handleDeleteTransaction} />}
-        {activeTab === 'bazar-report' && <BazarReportPage />}
-        {activeTab === 'expense-report' && <ExpenseReportPage />}
+        {activeTab === 'bazar-report' && (
+          <ReportView 
+            title="Bazar Report" 
+            icon={BarChartBig} 
+            transactions={transactions}
+            filterFn={(t) => t.category === Category.BAZAR}
+            onUpdateTransaction={handleUpdateTransaction}
+            onDeleteTransaction={handleDeleteTransaction}
+            colorClass="text-rose-600 dark:text-rose-400"
+            bgClass="bg-rose-50 dark:bg-rose-900/20"
+            totalLabel="Total Spent This Month"
+            emptyMessage="No records for this month."
+          />
+        )}
+        {activeTab === 'expense-report' && (
+          <ReportView 
+            title="Expense Report" 
+            icon={Receipt} 
+            transactions={transactions}
+            filterFn={(t) => t.type === 'expense'}
+            onUpdateTransaction={handleUpdateTransaction}
+            onDeleteTransaction={handleDeleteTransaction}
+            colorClass="text-purple-600 dark:text-purple-400"
+            bgClass="bg-purple-50 dark:bg-purple-900/20"
+            totalLabel="Total Expenses This Month"
+            emptyMessage="No expense records for this month."
+          />
+        )}
         {activeTab === 'lending' && <LendingView transactions={transactions} onAddTransaction={handleAddTransaction} onUpdateTransaction={handleUpdateTransaction} onDeleteTransaction={handleDeleteTransaction} />}
         {activeTab === 'history' && <HistoryView transactions={transactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransaction={handleDeleteTransaction} />}
         {activeTab === 'dashboard' && <DashboardView period={dashboardPeriod} />}

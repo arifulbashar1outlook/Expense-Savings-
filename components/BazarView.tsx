@@ -13,7 +13,7 @@ const BazarView: React.FC<BazarViewProps> = ({ transactions, onAddTransaction, o
     const [item, setItem] = useState('');
     const [amount, setAmount] = useState('');
     const [paidFrom, setPaidFrom] = useState<AccountType>('cash');
-    // Initialize date with current time, but it won't reset on parent re-renders now
+    // Initialize date with current time
     const [dateTime, setDateTime] = useState(new Date().toISOString().slice(0, 16));
 
     // Edit State
@@ -53,7 +53,8 @@ const BazarView: React.FC<BazarViewProps> = ({ transactions, onAddTransaction, o
       });
       setItem('');
       setAmount('');
-      // Note: We deliberately do NOT reset dateTime here so the user can keep adding items for the same selected time.
+      // Reset time to current device time for the next entry
+      setDateTime(new Date().toISOString().slice(0, 16));
     };
 
     const startEditing = (t: Transaction) => {
@@ -85,6 +86,15 @@ const BazarView: React.FC<BazarViewProps> = ({ transactions, onAddTransaction, o
 
         onUpdateTransaction(updatedTx);
         setEditingTx(null);
+    };
+
+    const handleDelete = () => {
+        if (editingTx) {
+            if (confirm("Are you sure you want to delete this item?")) {
+                onDeleteTransaction(editingTx.id);
+                setEditingTx(null);
+            }
+        }
     };
 
     const getGroupKey = (dateStr: string) => {
@@ -161,11 +171,19 @@ const BazarView: React.FC<BazarViewProps> = ({ transactions, onAddTransaction, o
                             />
                         </div>
                     </div>
-                    <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex gap-2">
-                        <button onClick={() => setEditingTx(null)} className="flex-1 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
-                        <button onClick={saveEdit} className="flex-1 py-2 text-sm bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg font-medium flex items-center justify-center gap-2">
-                            <Check className="w-4 h-4" /> Save
+                    <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-between gap-3 bg-gray-50 dark:bg-gray-800/50">
+                        <button 
+                            onClick={handleDelete}
+                            className="text-red-600 hover:text-red-700 dark:text-red-400 text-sm font-medium flex items-center gap-2 px-2"
+                        >
+                            <Trash2 className="w-4 h-4" /> Delete
                         </button>
+                        <div className="flex gap-2">
+                            <button onClick={() => setEditingTx(null)} className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
+                            <button onClick={saveEdit} className="px-4 py-2 text-sm bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg font-medium flex items-center justify-center gap-2">
+                                <Check className="w-4 h-4" /> Save
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

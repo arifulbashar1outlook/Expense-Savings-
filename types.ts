@@ -14,6 +14,7 @@ export enum Category {
   INVESTMENT = 'Investment',
   TRANSFER = 'Transfer',
   LENDING = 'Lending & Debt',
+  SEND_HOME = 'Send Home',
   OTHER = 'Other'
 }
 
